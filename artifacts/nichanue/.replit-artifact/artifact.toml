@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "NICHANUE"
+description = "A Swahili-first four-step service that verifies a phone number, collects a short loan-access story, accepts a configurable Paystack fee, and generates a downloadable Nichanue ID ticket."
+version = "1.0.0"
+id = "artifacts/nichanue"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21275
+
+[services.development]
+run = "pnpm --filter @workspace/nichanue run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/nichanue", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/nichanue/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21275"
+BASE_PATH = "/"

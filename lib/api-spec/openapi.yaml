@@ -1,0 +1,299 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: nichanue
+    description: Nichanue application workflow
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /nichanue/config:
+    get:
+      operationId: getNichanueConfig
+      tags: [nichanue]
+      summary: Get the current Nichanue fee and provider readiness
+      responses:
+        "200":
+          description: Nichanue configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NichanueConfig"
+  /nichanue/verification/start:
+    post:
+      operationId: startPhoneVerification
+      tags: [nichanue]
+      summary: Start phone verification with Talk Sasa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhoneVerificationInput"
+      responses:
+        "200":
+          description: Verification started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationStart"
+        "400":
+          description: Invalid phone number
+  /nichanue/verification/confirm:
+    post:
+      operationId: confirmPhoneVerification
+      tags: [nichanue]
+      summary: Confirm a phone verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhoneVerificationConfirmInput"
+      responses:
+        "200":
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResult"
+        "400":
+          description: Invalid verification code
+  /nichanue/applications:
+    post:
+      operationId: createNichanueApplication
+      tags: [nichanue]
+      summary: Create a Nichanue application after phone verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NichanueApplicationInput"
+      responses:
+        "201":
+          description: Application created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NichanueApplication"
+        "400":
+          description: Invalid application
+  /nichanue/payments/initialize:
+    post:
+      operationId: initializeNichanuePayment
+      tags: [nichanue]
+      summary: Initialize the Paystack fee payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "200":
+          description: Payment initialization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentInitialization"
+        "400":
+          description: Invalid payment request
+  /nichanue/payments/verify/{reference}:
+    get:
+      operationId: verifyNichanuePayment
+      tags: [nichanue]
+      summary: Verify a Paystack payment
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentVerification"
+  /nichanue/tickets/{applicationId}/download:
+    get:
+      operationId: downloadNichanueTicket
+      tags: [nichanue]
+      summary: Download a Nichanue ID ticket
+      parameters:
+        - name: applicationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Downloadable ticket document
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Ticket not found
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    NichanueConfig:
+      type: object
+      properties:
+        feeKes:
+          type: number
+        currency:
+          type: string
+        talkSasaReady:
+          type: boolean
+        paystackReady:
+          type: boolean
+        demoMode:
+          type: boolean
+      required: [feeKes, currency, talkSasaReady, paystackReady, demoMode]
+    PhoneVerificationInput:
+      type: object
+      properties:
+        phone:
+          type: string
+          minLength: 9
+      required: [phone]
+    PhoneVerificationConfirmInput:
+      type: object
+      properties:
+        phone:
+          type: string
+          minLength: 9
+        code:
+          type: string
+          minLength: 4
+          maxLength: 8
+        verificationId:
+          type: string
+      required: [phone, code, verificationId]
+    VerificationStart:
+      type: object
+      properties:
+        verificationId:
+          type: string
+        message:
+          type: string
+        demoMode:
+          type: boolean
+      required: [verificationId, message, demoMode]
+    VerificationResult:
+      type: object
+      properties:
+        verified:
+          type: boolean
+        phone:
+          type: string
+        message:
+          type: string
+      required: [verified, phone, message]
+    NichanueApplicationInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+        phone:
+          type: string
+          minLength: 9
+        frustrations:
+          type: array
+          items:
+            type: string
+          minItems: 1
+        verificationId:
+          type: string
+        consent:
+          type: boolean
+      required: [name, phone, frustrations, verificationId, consent]
+    NichanueApplication:
+      type: object
+      properties:
+        applicationId:
+          type: string
+        nichanueId:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        frustrations:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        feeKes:
+          type: number
+        paid:
+          type: boolean
+        createdAt:
+          type: string
+      required: [applicationId, nichanueId, name, phone, frustrations, status, feeKes, paid, createdAt]
+    PaymentInput:
+      type: object
+      properties:
+        applicationId:
+          type: string
+        email:
+          type: string
+          format: email
+      required: [applicationId, email]
+    PaymentInitialization:
+      type: object
+      properties:
+        reference:
+          type: string
+        authorizationUrl:
+          type: string
+        accessCode:
+          type: string
+        demoMode:
+          type: boolean
+      required: [reference, authorizationUrl, accessCode, demoMode]
+    PaymentVerification:
+      type: object
+      properties:
+        paid:
+          type: boolean
+        reference:
+          type: string
+        applicationId:
+          type: string
+        message:
+          type: string
+      required: [paid, reference, applicationId, message]
+
