@@ -76,3 +76,12 @@ stored as HMAC hashes, expire after 10 minutes, and are limited to five attempts
   They must never be placed in `VITE_`-prefixed variables or committed to the repository.
 - Same-origin deployment means cookies/CORS are simpler, but the API is still public at
   `/api/*` — don't rely on origin checks alone for anything sensitive.
+
+
+## Security hardening included
+
+The release includes production security headers, disables Express fingerprinting, limits API request bodies, uses a restrictive Content Security Policy on Vercel, and keeps payment/SMS credentials server-side. The frontend also includes a production-only browser inspection deterrent for common DevTools shortcuts and the context menu.
+
+The DevTools deterrent is not a security boundary. A browser user can always inspect JavaScript that has been downloaded to their device. Do not put API secrets, database credentials, private signing keys, or trusted payment logic in the frontend.
+
+Payment verification cross-checks the Paystack transaction reference, application metadata, amount, currency, and successful status before marking an application paid.
