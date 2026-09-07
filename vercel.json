@@ -1,7 +1,7 @@
 {
   "installCommand": "corepack enable && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @workspace/nichanue run build",
-  "outputDirectory": "artifacts/nichanue/dist/public",
+  "buildCommand": "pnpm --filter @workspace/nichanue run build && rm -rf dist && cp -R artifacts/nichanue/dist/public dist",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -42,5 +42,6 @@
         }
       ]
     }
-  ]
+  ],
+  "framework": "vite"
 }
