@@ -3,9 +3,7 @@
   "buildCommand": "pnpm --filter @workspace/nichanue run build",
   "outputDirectory": "artifacts/nichanue/dist/public",
   "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

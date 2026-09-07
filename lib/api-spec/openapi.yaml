@@ -177,9 +177,7 @@ components:
           type: boolean
         paystackReady:
           type: boolean
-        demoMode:
-          type: boolean
-      required: [feeKes, currency, talkSasaReady, paystackReady, demoMode]
+      required: [feeKes, currency, talkSasaReady, paystackReady]
     PhoneVerificationInput:
       type: object
       properties:
@@ -207,9 +205,7 @@ components:
           type: string
         message:
           type: string
-        demoMode:
-          type: boolean
-      required: [verificationId, message, demoMode]
+      required: [verificationId, message]
     VerificationResult:
       type: object
       properties:
@@ -281,9 +277,7 @@ components:
           type: string
         accessCode:
           type: string
-        demoMode:
-          type: boolean
-      required: [reference, authorizationUrl, accessCode, demoMode]
+      required: [reference, authorizationUrl, accessCode]
     PaymentVerification:
       type: object
       properties:

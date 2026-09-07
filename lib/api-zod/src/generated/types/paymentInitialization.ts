@@ -10,5 +10,4 @@ export interface PaymentInitialization {
   reference: string;
   authorizationUrl: string;
   accessCode: string;
-  demoMode: boolean;
 }

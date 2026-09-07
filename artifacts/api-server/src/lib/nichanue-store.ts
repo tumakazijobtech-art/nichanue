@@ -16,12 +16,22 @@ export type NichanueApplication = {
   createdAt: string;
 };
 
+export type VerificationSession = {
+  verificationId: string;
+  phone: string;
+  codeHash: string;
+  attempts: number;
+  expiresAt: number;
+  verifiedAt?: number;
+};
+
 type NichanueConfig = {
   feeKes: number;
   currency: "KES";
 };
 
 const memoryApplications = new Map<string, NichanueApplication>();
+const memoryVerificationSessions = new Map<string, VerificationSession>();
 let memoryConfig: NichanueConfig | undefined;
 let mongoClient: MongoClient | undefined;
 let mongoCollection: Collection<NichanueApplication> | undefined;
@@ -121,4 +131,92 @@ export async function markApplicationPaid(
   };
   memoryApplications.set(applicationId, paidApplication);
   return paidApplication;
+}
+
+async function getVerificationCollection() {
+  const collection = await getMongoCollection();
+  return collection?.db.collection<VerificationSession>("verification_sessions");
+}
+
+export async function createVerificationSession(session: VerificationSession) {
+  const collection = await getVerificationCollection();
+  if (collection) {
+    await collection.insertOne(session);
+    return session;
+  }
+  if (process.env["MONGODB_URI"]) {
+    throw new Error("MongoDB is unavailable for live verification storage");
+  }
+  memoryVerificationSessions.set(session.verificationId, session);
+  return session;
+}
+
+export async function getVerificationSession(verificationId: string) {
+  const collection = await getVerificationCollection();
+  if (collection) return collection.findOne({ verificationId });
+  if (process.env["MONGODB_URI"]) return undefined;
+  return memoryVerificationSessions.get(verificationId);
+}
+
+export async function incrementVerificationAttempts(verificationId: string) {
+  const collection = await getVerificationCollection();
+  if (collection) {
+    await collection.updateOne(
+      { verificationId },
+      { $inc: { attempts: 1 } },
+    );
+    return;
+  }
+  if (process.env["MONGODB_URI"]) return;
+
+  const session = memoryVerificationSessions.get(verificationId);
+  if (session) {
+    memoryVerificationSessions.set(verificationId, {
+      ...session,
+      attempts: session.attempts + 1,
+    });
+  }
+}
+
+export async function markVerificationVerified(
+  verificationId: string,
+  expiresAt: number,
+) {
+  const collection = await getVerificationCollection();
+  if (collection) {
+    await collection.updateOne(
+      { verificationId },
+      { $set: { verifiedAt: Date.now(), expiresAt } },
+    );
+    return;
+  }
+  if (process.env["MONGODB_URI"]) {
+    throw new Error("MongoDB is unavailable for live verification storage");
+  }
+
+  const session = memoryVerificationSessions.get(verificationId);
+  if (session) {
+    memoryVerificationSessions.set(verificationId, {
+      ...session,
+      verifiedAt: Date.now(),
+      expiresAt,
+    });
+  }
+}
+
+export async function hasVerifiedPhone(
+  verificationId: string,
+  phone: string,
+) {
+  const collection = await getVerificationCollection();
+  const session = collection
+    ? await collection.findOne({ verificationId, phone })
+    : process.env["MONGODB_URI"]
+      ? undefined
+    : memoryVerificationSessions.get(verificationId);
+  return Boolean(
+    session?.verifiedAt &&
+      session.phone === phone &&
+      session.expiresAt > Date.now(),
+  );
 }

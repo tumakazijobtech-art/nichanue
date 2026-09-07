@@ -24,8 +24,7 @@ export const GetNichanueConfigResponse = zod.object({
   "feeKes": zod.number(),
   "currency": zod.string(),
   "talkSasaReady": zod.boolean(),
-  "paystackReady": zod.boolean(),
-  "demoMode": zod.boolean()
+  "paystackReady": zod.boolean()
 })
 
 
@@ -42,8 +41,7 @@ export const StartPhoneVerificationBody = zod.object({
 
 export const StartPhoneVerificationResponse = zod.object({
   "verificationId": zod.string(),
-  "message": zod.string(),
-  "demoMode": zod.boolean()
+  "message": zod.string()
 })
 
 
@@ -112,8 +110,7 @@ export const InitializeNichanuePaymentBody = zod.object({
 export const InitializeNichanuePaymentResponse = zod.object({
   "reference": zod.string(),
   "authorizationUrl": zod.string(),
-  "accessCode": zod.string(),
-  "demoMode": zod.boolean()
+  "accessCode": zod.string()
 })
 
 

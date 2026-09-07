@@ -11,5 +11,4 @@ export interface NichanueConfig {
   currency: string;
   talkSasaReady: boolean;
   paystackReady: boolean;
-  demoMode: boolean;
 }

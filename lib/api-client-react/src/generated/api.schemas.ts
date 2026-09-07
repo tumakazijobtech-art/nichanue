@@ -14,7 +14,6 @@ export interface NichanueConfig {
   currency: string;
   talkSasaReady: boolean;
   paystackReady: boolean;
-  demoMode: boolean;
 }
 
 export interface PhoneVerificationInput {
@@ -36,7 +35,6 @@ export interface PhoneVerificationConfirmInput {
 export interface VerificationStart {
   verificationId: string;
   message: string;
-  demoMode: boolean;
 }
 
 export interface VerificationResult {
@@ -77,7 +75,6 @@ export interface PaymentInitialization {
   reference: string;
   authorizationUrl: string;
   accessCode: string;
-  demoMode: boolean;
 }
 
 export interface PaymentVerification {

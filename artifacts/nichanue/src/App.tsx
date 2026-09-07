@@ -223,7 +223,7 @@ function Home() {
         onSuccess: (result) => {
           setPaymentReference(result.reference);
           setPaymentStarted(true);
-          if (result.authorizationUrl && !result.demoMode) {
+           if (result.authorizationUrl) {
             window.open(result.authorizationUrl, '_blank', 'noopener,noreferrer');
           }
         },
@@ -330,11 +330,6 @@ function Home() {
           </aside>
 
           <section className="journey-enter" key={step}>
-            {config.demoMode ? (
-              <div className="mb-4 rounded-xl border border-[#e7d59b] bg-[#fff9e8] p-4 text-sm leading-6 text-[#765b1c]" data-testid="status-demo-mode">
-                <strong>Demo mode.</strong> You can preview the full journey without making a real payment. Your information is still handled securely.
-              </div>
-            ) : null}
             {message ? (
               <div
                 className={`mb-4 rounded-xl border p-4 text-sm leading-6 ${
@@ -409,7 +404,7 @@ function Home() {
                       <div className="flex gap-3 text-sm leading-6 text-[#226653]">
                         <ShieldCheck size={18} className="mt-0.5 shrink-0" />
                         <p>
-                          A code was sent to <strong>{phone}</strong>. {startVerification.data?.demoMode ? 'For demo mode, use 1234.' : 'Check your messages.'}
+                           A code was sent to <strong>{phone}</strong>. Check your messages.
                         </p>
                       </div>
                       <div>
@@ -543,9 +538,9 @@ function Home() {
                     <div className="flex gap-3">
                       <CheckCircle2 className="shrink-0 text-[#1c6b5d]" size={22} />
                       <div>
-                        <p className="font-semibold text-[#226653]">{config.demoMode ? 'Demo payment is ready.' : 'Payment is ready.'}</p>
+                         <p className="font-semibold text-[#226653]">Payment is ready.</p>
                         <p className="mt-1 text-sm leading-6 text-[#63747a]">
-                          {config.demoMode ? 'Use the button below to check the demo payment status.' : 'The Paystack payment window is open. Return here after completing payment.'}
+                           The Paystack payment window is open. Return here after completing payment.
                         </p>
                       </div>
                     </div>

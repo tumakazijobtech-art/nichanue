@@ -9,5 +9,4 @@
 export interface VerificationStart {
   verificationId: string;
   message: string;
-  demoMode: boolean;
 }

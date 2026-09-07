@@ -9,7 +9,8 @@ Professional English four-step workflow for verified loan-access enquiries, Pays
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Optional env: `MONGODB_URI`, `MONGODB_DB`, `NICHANUE_FEE_KES`, `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_CALLBACK_URL`, `TALKSASA_API_KEY`, `TALKSASA_VERIFY_START_URL`, `TALKSASA_VERIFY_CONFIRM_URL`
+- Required for production: `MONGODB_URI`, `VERIFICATION_CODE_SECRET`, `PAYSTACK_SECRET_KEY`, `TALKSASA_API_KEY`, `TALKSASA_SENDER_ID`
+- Optional env: `MONGODB_DB`, `NICHANUE_FEE_KES`, `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_CALLBACK_URL`, `TALKSASA_SMS_URL`
 
 ## Stack
 
@@ -25,13 +26,13 @@ Professional English four-step workflow for verified loan-access enquiries, Pays
 - `artifacts/nichanue/src/App.tsx` — the four-step English applicant experience
 - `artifacts/nichanue/src/index.css` — NICHANUE visual tokens and responsive styling
 - `artifacts/api-server/src/routes/nichanue.ts` — verification, application, Paystack, and ticket endpoints
-- `artifacts/api-server/src/lib/nichanue-store.ts` — MongoDB-backed store with safe in-memory fallback for local/demo mode
+- `artifacts/api-server/src/lib/nichanue-store.ts` — MongoDB-backed application and verification-session store
 - `lib/api-spec/openapi.yaml` — source of truth for the generated API hooks and schemas
 
 ## Architecture decisions
 
 - Paystack and Talk Sasa are server-side REST integrations configured through environment variables; credentials never reach the browser.
-- Missing provider credentials intentionally enables demo mode so the four-step journey can be previewed without claiming a real payment or phone verification.
+- Production does not have a demo verification or payment path. Missing live credentials causes the affected API operation to fail instead of accepting fake codes or payments.
 - MongoDB stores configurable fee settings and applications; the temporary memory store is only a local fallback when MongoDB is not configured.
 - The downloadable ticket is an ID confirmation document and explicitly does not claim to be a CRB report or a loan approval.
 
@@ -46,7 +47,8 @@ NICHANUE collects a user's name, phone number, and loan-access needs in English;
 ## Gotchas
 
 - After changing `lib/api-spec/openapi.yaml`, run `pnpm --filter @workspace/api-spec run codegen` before typechecking frontend or backend callers.
-- Configure Talk Sasa endpoint URLs as well as its API key before turning off demo mode.
+- Configure the Talk Sasa API key and approved sender ID before deploying. The SMS endpoint defaults to `https://bulksms.talksasa.com/api/v3/sms/send`; override it with `TALKSASA_SMS_URL` only when Talk Sasa gives you a different endpoint.
+- Configure `VERIFICATION_CODE_SECRET` with a long random value; it is used to hash one-time codes before they are stored.
 - The default fee is KES 50 until MongoDB settings or `NICHANUE_FEE_KES` overrides it.
 
 ## Pointers

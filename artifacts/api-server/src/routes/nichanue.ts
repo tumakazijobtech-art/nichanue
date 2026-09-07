@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import PDFDocument from "pdfkit";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomInt, randomUUID } from "node:crypto";
 import {
   ConfirmPhoneVerificationBody,
   CreateNichanueApplicationBody,
@@ -12,17 +12,17 @@ import {
 } from "@workspace/api-zod";
 import {
   createApplication,
+  createVerificationSession,
   getApplication,
   getNichanueConfig,
+  getVerificationSession,
+  hasVerifiedPhone,
+  incrementVerificationAttempts,
   markApplicationPaid,
+  markVerificationVerified,
 } from "../lib/nichanue-store";
 
 const router: IRouter = Router();
-const verificationSessions = new Map<
-  string,
-  { phone: string; code: string; expiresAt: number }
->();
-const demoPaymentApplications = new Map<string, string>();
 
 const frustrationLabels = new Set([
   "My loan application was declined",
@@ -42,8 +42,7 @@ function normalizePhone(phone: string) {
 function providerReady() {
   return Boolean(
     process.env["TALKSASA_API_KEY"] &&
-      process.env["TALKSASA_VERIFY_START_URL"] &&
-      process.env["TALKSASA_VERIFY_CONFIRM_URL"],
+      process.env["TALKSASA_SENDER_ID"],
   );
 }
 
@@ -51,23 +50,56 @@ function paystackReady() {
   return Boolean(process.env["PAYSTACK_SECRET_KEY"]);
 }
 
-async function talkSasaRequest(
-  endpoint: string | undefined,
-  payload: Record<string, string>,
+function storageReady() {
+  return Boolean(
+    process.env["MONGODB_URI"] && process.env["VERIFICATION_CODE_SECRET"],
+  );
+}
+
+function hashVerificationCode(
+  verificationId: string,
+  phone: string,
+  code: string,
 ) {
-  if (!endpoint || !process.env["TALKSASA_API_KEY"]) return undefined;
+  return createHmac(
+    "sha256",
+    process.env["VERIFICATION_CODE_SECRET"] ?? "",
+  )
+    .update(`${verificationId}:${phone}:${code}`)
+    .digest("hex");
+}
+
+async function sendTalkSasaSms(phone: string, code: string) {
+  const endpoint =
+    process.env["TALKSASA_SMS_URL"] ??
+    "https://bulksms.talksasa.com/api/v3/sms/send";
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env["TALKSASA_API_KEY"]}`,
+      Accept: "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      recipient: phone,
+      sender_id: process.env["TALKSASA_SENDER_ID"],
+      type: "plain",
+      message: `Your Nichanue verification code is ${code}. It expires in 10 minutes.`,
+    }),
   });
+  const payload = (await response.json().catch(() => undefined)) as
+    | { status?: boolean | string; success?: boolean; message?: string }
+    | undefined;
   if (!response.ok) {
-    throw new Error(`Talk Sasa returned ${response.status}`);
+    throw new Error(
+      payload?.message
+        ? `Talk Sasa returned ${response.status}: ${payload.message}`
+        : `Talk Sasa returned ${response.status}`,
+    );
   }
-  return (await response.json()) as { verificationId?: string };
+  if (payload?.status === false || payload?.success === false) {
+    throw new Error(payload.message ?? "Talk Sasa rejected the SMS");
+  }
 }
 
 router.get("/nichanue/config", async (_req, res) => {
@@ -77,7 +109,6 @@ router.get("/nichanue/config", async (_req, res) => {
       ...config,
       talkSasaReady: providerReady(),
       paystackReady: paystackReady(),
-      demoMode: !providerReady() || !paystackReady(),
     }),
   );
 });
@@ -85,26 +116,32 @@ router.get("/nichanue/config", async (_req, res) => {
 router.post("/nichanue/verification/start", async (req, res) => {
   const parsed = StartPhoneVerificationBody.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Enter a valid phone number." });
+  if (!providerReady()) {
+    return res
+      .status(503)
+      .json({ error: "Live SMS verification is not configured yet." });
+  }
+  if (!storageReady()) {
+    return res
+      .status(503)
+      .json({ error: "Live verification storage is not configured yet." });
+  }
 
   const phone = normalizePhone(parsed.data.phone);
   const verificationId = randomUUID();
+  const code = randomInt(100000, 1000000).toString();
   try {
-    const providerResponse = await talkSasaRequest(
-      process.env["TALKSASA_VERIFY_START_URL"],
-      { phone },
-    );
-    const providerVerificationId = providerResponse?.verificationId ?? verificationId;
-    verificationSessions.set(providerVerificationId, {
+    await createVerificationSession({
+      verificationId,
       phone,
-      code: "1234",
+      codeHash: hashVerificationCode(verificationId, phone, code),
+      attempts: 0,
       expiresAt: Date.now() + 10 * 60 * 1000,
     });
+    await sendTalkSasaSms(phone, code);
     return res.json({
-      verificationId: providerVerificationId,
-      message: providerReady()
-        ? "A verification code has been sent to your phone."
-        : "Demo mode: use verification code 1234. Connect Talk Sasa for live verification.",
-      demoMode: !providerReady(),
+      verificationId,
+      message: "A verification code has been sent to your phone.",
     });
   } catch {
     return res.status(502).json({ error: "The verification service is not available right now." });
@@ -116,31 +153,36 @@ router.post("/nichanue/verification/confirm", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Enter the verification code." });
 
   const phone = normalizePhone(parsed.data.phone);
-  const session = verificationSessions.get(parsed.data.verificationId);
-  const isDemo = !providerReady();
-  if (!session || session.phone !== phone || session.expiresAt < Date.now()) {
+  if (!providerReady() || !storageReady()) {
+    return res
+      .status(503)
+      .json({ error: "Live SMS verification is not configured yet." });
+  }
+  const session = await getVerificationSession(parsed.data.verificationId);
+  if (
+    !session ||
+    session.phone !== phone ||
+    session.expiresAt < Date.now() ||
+    session.verifiedAt ||
+    session.attempts >= 5
+  ) {
     return res.status(400).json({ error: "That code has expired or was not recognized. Request a new code." });
   }
 
-  if (isDemo && parsed.data.code !== session.code) {
-    return res.status(400).json({ error: "In demo mode, use verification code 1234." });
+  const codeHash = hashVerificationCode(
+    parsed.data.verificationId,
+    phone,
+    parsed.data.code,
+  );
+  if (codeHash !== session.codeHash) {
+    await incrementVerificationAttempts(parsed.data.verificationId);
+    return res.status(400).json({ error: "That code is incorrect. Please try again." });
   }
 
-  if (!isDemo && process.env["TALKSASA_VERIFY_CONFIRM_URL"]) {
-    try {
-      const response = await talkSasaRequest(
-        process.env["TALKSASA_VERIFY_CONFIRM_URL"],
-        { phone, code: parsed.data.code, verificationId: parsed.data.verificationId },
-      );
-      if (response === undefined) {
-        return res.status(502).json({ error: "Phone verification could not be completed." });
-      }
-    } catch {
-      return res.status(502).json({ error: "Phone verification could not be completed. Please try again." });
-    }
-  }
-
-  verificationSessions.delete(parsed.data.verificationId);
+  await markVerificationVerified(
+    parsed.data.verificationId,
+    Date.now() + 60 * 60 * 1000,
+  );
   return res.json({
     verified: true,
     phone,
@@ -156,11 +198,20 @@ router.post("/nichanue/applications", async (req, res) => {
   if (parsed.data.frustrations.some((item) => !frustrationLabels.has(item))) {
     return res.status(400).json({ error: "One of the selected options was not recognized." });
   }
+  const normalizedPhone = normalizePhone(parsed.data.phone);
+  if (
+    !storageReady() ||
+    !(await hasVerifiedPhone(parsed.data.verificationId, normalizedPhone))
+  ) {
+    return res
+      .status(400)
+      .json({ error: "Verify your phone number before continuing." });
+  }
 
   const config = await getNichanueConfig();
   const application = await createApplication({
     ...parsed.data,
-    phone: normalizePhone(parsed.data.phone),
+    phone: normalizedPhone,
     nichanueId: `NC-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
     feeKes: config.feeKes,
   });
@@ -185,13 +236,7 @@ router.post("/nichanue/payments/initialize", async (req, res) => {
 
   const reference = `NICHANUE-${application.nichanueId}-${randomUUID().slice(0, 8)}`;
   if (!paystackReady()) {
-    demoPaymentApplications.set(`DEMO-${reference}`, application.applicationId);
-    return res.json({
-      reference: `DEMO-${reference}`,
-      authorizationUrl: "",
-      accessCode: "",
-      demoMode: true,
-    });
+    return res.status(503).json({ error: "Live payments are not configured yet." });
   }
 
   try {
@@ -221,7 +266,6 @@ router.post("/nichanue/payments/initialize", async (req, res) => {
       reference: payload.data.reference ?? reference,
       authorizationUrl: payload.data.authorization_url,
       accessCode: payload.data.access_code ?? "",
-      demoMode: false,
     });
   } catch {
     return res.status(502).json({ error: "Paystack is not available right now." });
@@ -231,19 +275,6 @@ router.post("/nichanue/payments/initialize", async (req, res) => {
 router.get("/nichanue/payments/verify/:reference", async (req, res) => {
   const parsed = VerifyNichanuePaymentParams.safeParse(req.params);
   if (!parsed.success) return res.status(400).json({ error: "The payment reference is invalid." });
-
-  if (parsed.data.reference.startsWith("DEMO-")) {
-    const applicationId = demoPaymentApplications.get(parsed.data.reference);
-    const fallbackApplication = applicationId ? await getApplication(applicationId) : undefined;
-    if (!fallbackApplication) return res.status(404).json({ error: "Application not found." });
-    const paid = await markApplicationPaid(fallbackApplication.applicationId, parsed.data.reference);
-    return res.json({
-      paid: Boolean(paid),
-      reference: parsed.data.reference,
-      applicationId: fallbackApplication.applicationId,
-      message: "Demo payment received.",
-    });
-  }
 
   if (!paystackReady()) return res.status(503).json({ error: "Paystack is not configured yet." });
   try {
