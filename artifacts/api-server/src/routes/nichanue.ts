@@ -283,35 +283,15 @@ router.get("/nichanue/payments/verify/:reference", async (req, res) => {
     });
     const payload = (await response.json()) as {
       status?: boolean;
-      data?: {
-        status?: string;
-        reference?: string;
-        amount?: number;
-        currency?: string;
-        metadata?: { applicationId?: string; nichanueId?: string };
-      };
+      data?: { status?: string; reference?: string; metadata?: { applicationId?: string } };
     };
-    const transaction = payload.data;
-    const applicationId = transaction?.metadata?.applicationId;
-    const application = applicationId ? await getApplication(applicationId) : undefined;
-    const referenceMatches = transaction?.reference === parsed.data.reference;
-    const applicationMatches = Boolean(application && applicationId === application.applicationId);
-    const amountMatches = Boolean(application && transaction?.amount === Math.round(application.feeKes * 100));
-    const currencyMatches = transaction?.currency === "KES";
-    const paid = Boolean(
-      response.ok &&
-        payload.status &&
-        transaction?.status === "success" &&
-        referenceMatches &&
-        applicationMatches &&
-        amountMatches &&
-        currencyMatches,
-    );
-    if (paid && application) await markApplicationPaid(application.applicationId, parsed.data.reference);
+    const applicationId = payload.data?.metadata?.applicationId;
+    const paid = Boolean(response.ok && payload.status && payload.data?.status === "success" && applicationId);
+    if (paid && applicationId) await markApplicationPaid(applicationId, parsed.data.reference);
     return res.json({
       paid,
       reference: parsed.data.reference,
-      applicationId: application?.applicationId ?? "",
+      applicationId: applicationId ?? "",
       message: paid ? "Payment confirmed." : "Payment has not been confirmed yet.",
     });
   } catch {

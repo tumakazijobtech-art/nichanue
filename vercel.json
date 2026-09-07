@@ -1,6 +1,6 @@
 {
   "installCommand": "corepack enable && pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @workspace/nichanue run build && rm -rf dist && cp -R artifacts/nichanue/dist/public dist",
+  "buildCommand": "pnpm --filter @workspace/nichanue run build",
   "outputDirectory": "dist",
   "rewrites": [
     {
@@ -11,37 +11,5 @@
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
-        {
-          "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=()"
-        },
-        {
-          "key": "Cross-Origin-Opener-Policy",
-          "value": "same-origin"
-        },
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://api.paystack.co https://bulksms.talksasa.com; form-action 'self' https://*.paystack.co;"
-        }
-      ]
-    }
-  ],
-  "framework": "vite"
+  ]
 }
